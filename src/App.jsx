@@ -38,7 +38,8 @@ function Login({ onDone }) {
   return (
     <div className="login">
       <form onSubmit={submit}>
-        <h1>🍴 Forkplan Admin</h1>
+        <img className="login-logo" src="/logo.png" alt="" width="72" height="72" />
+        <h1>Forkplan Admin</h1>
         <ErrorBox error={err} />
         {!challenge ? (
           <>
@@ -75,7 +76,7 @@ export default function App() {
     <ToastProvider>
       <div className="shell">
         <nav>
-          <div className="brand">🍴 Forkplan</div>
+          <div className="brand"><img src="/logo.png" alt="" width="28" height="28" />Forkplan</div>
           {Object.entries(PAGES).map(([k, [label, , group]]) => {
             const showGroup = group !== lastGroup;
             lastGroup = group;
@@ -87,7 +88,7 @@ export default function App() {
             );
           })}
           <div className="spacer" />
-          <div className="who">{user.username}</div>
+          <div className="who">{user.email || user.username}</div>
           <button onClick={() => { signOut(); setUser(null); }}>Sign out</button>
         </nav>
         <main><Page /></main>
