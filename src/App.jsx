@@ -38,7 +38,8 @@ function Login({ onDone }) {
   return (
     <div className="login">
       <form onSubmit={submit}>
-        <h1>🍴 Forkplan Admin</h1>
+        <img className="login-logo" src="/logo.png" alt="" width="72" height="72" />
+        <h1>Forkplan Admin</h1>
         <ErrorBox error={err} />
         {!challenge ? (
           <>
