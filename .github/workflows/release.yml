@@ -1,0 +1,50 @@
+name: Release to production
+# Triggered by publishing a GitHub Release (tag vX.Y.Z).
+on:
+  release:
+    types: [published]
+
+env:
+  AWS_REGION: eu-west-2
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    # Skip drafts/pre-releases; require semver-style tags.
+    if: ${{ !github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-latest
+    # Configure required reviewers on this environment for a manual approval gate.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - name: Tag must be on main
+        run: |
+          git merge-base --is-ancestor HEAD origin/main \
+            || { echo "Release tag is not on main"; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: cp config/prod.json dist/config.json
+      - name: Refuse placeholder config
+        run: "! grep -q REPLACE_WITH dist/config.json"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: scripts/amplify-deploy.sh
+        env:
+          AMPLIFY_APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+          AMPLIFY_BRANCH: prod
