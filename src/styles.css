@@ -5,7 +5,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-size:14px; }
 a { color: var(--brand); }
 .shell { display:grid; grid-template-columns: 200px 1fr; min-height:100vh; }
 nav { background:var(--card); border-right:1px solid var(--line); padding:16px 12px; display:flex; flex-direction:column; gap:4px; }
-nav .brand { font-weight:700; font-size:16px; margin-bottom:12px; }
+nav .brand { font-weight:700; font-size:16px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+nav .brand img { border-radius:6px; }
 nav a { padding:8px 10px; border-radius:6px; text-decoration:none; color:var(--text); }
 nav a.active, nav a:hover { background:var(--bg); font-weight:600; }
 nav .spacer { flex:1; } nav .who { color:var(--muted); font-size:12px; padding:4px 10px; word-break:break-all; }

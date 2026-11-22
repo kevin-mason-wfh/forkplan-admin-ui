@@ -75,7 +75,7 @@ export default function App() {
     <ToastProvider>
       <div className="shell">
         <nav>
-          <div className="brand">🍴 Forkplan</div>
+          <div className="brand"><img src="/logo.png" alt="" width="28" height="28" />Forkplan</div>
           {Object.entries(PAGES).map(([k, [label, , group]]) => {
             const showGroup = group !== lastGroup;
             lastGroup = group;
