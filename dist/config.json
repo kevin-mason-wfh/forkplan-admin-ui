@@ -1,0 +1,9 @@
+{
+  "apiBaseUrl": "https://kt7490x9c3.execute-api.eu-west-2.amazonaws.com/dev",
+  "region": "eu-west-2",
+  "userPoolId": "eu-west-2_fNR7IgEeq",
+  "clientId": "7432uptsev6pj5kfbdli64esr9",
+  "adminGroups": ["admin", "catalog-admin", "support-admin"],
+  "tokenType": "access",
+  "openapiUrl": ""
+}
