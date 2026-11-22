@@ -88,7 +88,7 @@ export default function App() {
             );
           })}
           <div className="spacer" />
-          <div className="who">{user.username}</div>
+          <div className="who">{user.email || user.username}</div>
           <button onClick={() => { signOut(); setUser(null); }}>Sign out</button>
         </nav>
         <main><Page /></main>
