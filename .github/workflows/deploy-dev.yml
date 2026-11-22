@@ -1,0 +1,39 @@
+name: Deploy dev
+# Runs when a PR is merged (i.e. a push to main).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-west-2
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: cp config/dev.json dist/config.json
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: scripts/amplify-deploy.sh
+        env:
+          AMPLIFY_APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+          AMPLIFY_BRANCH: dev
