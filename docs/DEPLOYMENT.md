@@ -8,8 +8,8 @@
 
 GitHub Actions builds `dist/` and pushes it to Amplify Hosting via manual deployment
 (`create-deployment` → upload zip → `start-deployment`). Amplify is **not** connected to the
-repo, so it never builds on its own. Per-environment runtime config lives in
-`config/dev.json` and `config/prod.json` and is copied over `dist/config.json` at deploy time.
+repo, so it never builds on its own. Runtime config is **not** in the repo: `scripts/write-config.mjs` writes `dist/config.json` at deploy time from
+GitHub environment variables.
 
 ## One-time AWS setup (per environment: dev, prod)
 
@@ -19,7 +19,7 @@ repo, so it never builds on its own. Per-environment runtime config lives in
    Optionally add custom headers in the console (HSTS, CSP, `Cache-Control: no-store` for `/config.json`).
 2. GitHub OIDC: create the IAM identity provider `token.actions.githubusercontent.com` and a role
    trusting it, scoped to this repo and environment, e.g. condition
-   `token.actions.githubusercontent.com:sub` = `repo:kevin-mason-wfh/forkplan-admin-ui:environment:dev`
+   `token.actions.githubusercontent.com:sub` = `repo:kevin-mason-wfh@64310665/forkplan-admin-ui@1467770666:environment:dev` (immutable-subject format; `create-deploy-role.sh` reads it via `gh api repos/<repo>/actions/oidc/customization/sub`)
    (`...:environment:production` for prod). Permissions:
    `amplify:CreateDeployment`, `amplify:StartDeployment`, `amplify:GetJob` on the app's ARN.
    Use separate AWS accounts for dev and prod if you can.
@@ -28,11 +28,11 @@ repo, so it never builds on its own. Per-environment runtime config lives in
 ## One-time GitHub setup
 
 Settings → Environments → create `dev` and `production`. In each, add **variables**:
-`AWS_DEPLOY_ROLE_ARN`, `AMPLIFY_APP_ID`. On `production`, add **required reviewers**
+`AWS_DEPLOY_ROLE_ARN`, `AMPLIFY_APP_ID`, `API_BASE_URL`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`. On `production`, add **required reviewers**
 and restrict deployment to tags `v*`.
 
 Also: protect `main` (require PR + the `build` check) so every merge has passed CI.
-Fill in `config/prod.json` (the release workflow refuses to deploy while placeholders remain).
+The build fails if any config variable is missing, so an unconfigured environment can't deploy.
 
 ## Releasing to production
 
