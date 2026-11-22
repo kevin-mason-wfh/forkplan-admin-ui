@@ -1,9 +1,0 @@
-{
-  "apiBaseUrl": "REPLACE_WITH_PROD_API_URL",
-  "region": "eu-west-2",
-  "userPoolId": "REPLACE_WITH_PROD_USER_POOL_ID",
-  "clientId": "REPLACE_WITH_PROD_ADMIN_CLIENT_ID",
-  "adminGroups": ["admin", "catalog-admin", "support-admin"],
-  "tokenType": "access",
-  "openapiUrl": ""
-}

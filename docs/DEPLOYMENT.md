@@ -8,8 +8,8 @@
 
 GitHub Actions builds `dist/` and pushes it to Amplify Hosting via manual deployment
 (`create-deployment` → upload zip → `start-deployment`). Amplify is **not** connected to the
-repo, so it never builds on its own. Per-environment runtime config lives in
-`config/dev.json` and `config/prod.json` and is copied over `dist/config.json` at deploy time.
+repo, so it never builds on its own. Runtime config is **not** in the repo: `scripts/write-config.mjs` writes `dist/config.json` at deploy time from
+GitHub environment variables.
 
 ## One-time AWS setup (per environment: dev, prod)
 
@@ -28,11 +28,11 @@ repo, so it never builds on its own. Per-environment runtime config lives in
 ## One-time GitHub setup
 
 Settings → Environments → create `dev` and `production`. In each, add **variables**:
-`AWS_DEPLOY_ROLE_ARN`, `AMPLIFY_APP_ID`. On `production`, add **required reviewers**
+`AWS_DEPLOY_ROLE_ARN`, `AMPLIFY_APP_ID`, `API_BASE_URL`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`. On `production`, add **required reviewers**
 and restrict deployment to tags `v*`.
 
 Also: protect `main` (require PR + the `build` check) so every merge has passed CI.
-Fill in `config/prod.json` (the release workflow refuses to deploy while placeholders remain).
+The build fails if any config variable is missing, so an unconfigured environment can't deploy.
 
 ## Releasing to production
 

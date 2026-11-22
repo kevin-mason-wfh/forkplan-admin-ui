@@ -4,7 +4,7 @@ React admin UI for the Forkplan API. Cognito username/password sign-in (access t
 
 ## Run
     npm install
-    # edit public/config.json: apiBaseUrl, clientId
+    cp public/config.example.json public/config.json   # local only (gitignored); edit apiBaseUrl, userPoolId, clientId
     npm run dev      # http://localhost:5173
     npm run build    # static files in dist/ → S3 + CloudFront
 
