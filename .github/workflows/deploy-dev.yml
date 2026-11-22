@@ -28,7 +28,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: cp config/dev.json dist/config.json
+      - name: Write runtime config
+        run: node scripts/write-config.mjs
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID }}
+          COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
