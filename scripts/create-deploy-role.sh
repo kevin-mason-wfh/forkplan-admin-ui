@@ -10,6 +10,9 @@ REGION="${AWS_REGION:-eu-west-2}"
 ENV_NAME="${ENV_NAME:-dev}"
 GH_ENV="${GH_ENV:-$ENV_NAME}"                       # GitHub environment name (dev | production)
 REPO="${GH_REPO:-kevin-mason-wfh/forkplan-admin-ui}"
+# This GitHub account uses immutable OIDC subject claims: repo:<owner>@<ownerId>/<repo>@<repoId>.
+# Read the exact prefix from the repo rather than guessing.
+SUB_PREFIX="$(gh api "repos/${REPO}/actions/oidc/customization/sub" --jq .sub_claim_prefix)"
 ROLE="forkplan-admin-ci-${ENV_NAME}-deploy"
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 PROVIDER="arn:aws:iam::${ACCOUNT}:oidc-provider/token.actions.githubusercontent.com"
@@ -18,7 +21,7 @@ TRUST=$(cat <<JSON
 {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":"${PROVIDER}"},
  "Action":"sts:AssumeRoleWithWebIdentity",
  "Condition":{"StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com",
-  "token.actions.githubusercontent.com:sub":"repo:${REPO}:environment:${GH_ENV}"}}}]}
+  "token.actions.githubusercontent.com:sub":"${SUB_PREFIX}:environment:${GH_ENV}"}}}]}
 JSON
 )
 POLICY=$(cat <<JSON

@@ -19,7 +19,7 @@ repo, so it never builds on its own. Per-environment runtime config lives in
    Optionally add custom headers in the console (HSTS, CSP, `Cache-Control: no-store` for `/config.json`).
 2. GitHub OIDC: create the IAM identity provider `token.actions.githubusercontent.com` and a role
    trusting it, scoped to this repo and environment, e.g. condition
-   `token.actions.githubusercontent.com:sub` = `repo:kevin-mason-wfh/forkplan-admin-ui:environment:dev`
+   `token.actions.githubusercontent.com:sub` = `repo:kevin-mason-wfh@64310665/forkplan-admin-ui@1467770666:environment:dev` (immutable-subject format; `create-deploy-role.sh` reads it via `gh api repos/<repo>/actions/oidc/customization/sub`)
    (`...:environment:production` for prod). Permissions:
    `amplify:CreateDeployment`, `amplify:StartDeployment`, `amplify:GetJob` on the app's ARN.
    Use separate AWS accounts for dev and prod if you can.
