@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 const ToastCtx = createContext(() => {});
 export const useToast = () => useContext(ToastCtx);
@@ -8,13 +8,13 @@ export function ToastProvider({ children }) {
   const push = useCallback((msg, kind = 'ok') => {
     const id = Math.random();
     setList((l) => [...l, { id, msg, kind }]);
-    setTimeout(() => setList((l) => l.filter((t) => t.id !== id)), 4500);
+    setTimeout(() => setList((l) => l.filter((t) => t.id !== id)), kind === 'ok' ? 4500 : 9000);
   }, []);
   return (
     <ToastCtx.Provider value={push}>
       {children}
       <div className="toasts">
-        {list.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.msg}</div>)}
+        {list.map((t) => <div key={t.id} className={`toast ${t.kind}`} role={t.kind === 'ok' ? 'status' : 'alert'}>{t.msg}</div>)}
       </div>
     </ToastCtx.Provider>
   );
@@ -22,18 +22,24 @@ export function ToastProvider({ children }) {
 
 // `dirty` = unsaved edits; closing then asks for confirmation so work isn't lost by a stray click/Escape.
 export function Modal({ title, onClose, children, wide, dirty = false }) {
+  const overlayRef = useRef(null);
   const requestClose = useCallback(() => {
     if (!dirty || window.confirm('Discard your unsaved changes?')) onClose();
   }, [dirty, onClose]);
 
   useEffect(() => {
-    const h = (e) => e.key === 'Escape' && requestClose();
+    // With stacked modals only the top one reacts to Escape.
+    const h = (e) => {
+      if (e.key !== 'Escape') return;
+      const overlays = document.querySelectorAll('.overlay');
+      if (overlays[overlays.length - 1] === overlayRef.current) requestClose();
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [requestClose]);
 
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && requestClose()}>
+    <div className="overlay" ref={overlayRef} onMouseDown={(e) => e.target === e.currentTarget && requestClose()}>
       <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head"><h3>{title}</h3><button type="button" className="icon" aria-label="Close" onClick={requestClose}>✕</button></div>
         <div className="modal-body">{children}</div>
@@ -91,9 +97,78 @@ export const idOf = (o) => o?.id ?? o?.code;
 
 // ---- Shared building blocks -------------------------------------------------
 
-const STATUS_TONE = { PUBLISHED: 'green', RETIRED: 'red' };
-export const StatusBadge = ({ status }) =>
-  status ? <Badge tone={STATUS_TONE[status] || 'amber'}>{status}</Badge> : null;
+const STATUS_TONE = {
+  PUBLISHED: 'green', DRAFT: 'amber', RETIRED: 'grey',
+  ACTIVE: 'green', SUSPENDED: 'amber', DELETED: 'red',
+  GRACE_PERIOD: 'amber', EXPIRED: 'red', CANCELLED: 'grey',
+  FREE: 'grey', PRO: 'blue', ULTRA: 'blue',
+};
+export const humanize = (s) => (s ? String(s).replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase()) : '');
+export const StatusBadge = ({ status, label }) =>
+  status ? <Badge tone={STATUS_TONE[status] || 'grey'}>{label || humanize(status)}</Badge> : null;
+
+export const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' }) : '—');
+export const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+export const shortId = (id) => (id ? String(id).slice(0, 8) : '');
+
+// Monospace id with a one-click copy.
+export function CopyId({ id, short }) {
+  const toast = useToast();
+  if (!id) return null;
+  const copy = (e) => { e.stopPropagation(); navigator.clipboard?.writeText(id).then(() => toast('Copied')); };
+  return <code className="copy-id" title={`${id} — click to copy`} onClick={copy}>{short ? shortId(id) : id}</code>;
+}
+
+// Label / value list for read-only details.
+export function Facts({ rows }) {
+  return (
+    <dl className="facts">
+      {rows.filter(Boolean).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v ?? '—'}</dd></div>)}
+    </dl>
+  );
+}
+
+// Confirmation dialog that asks for an audit reason (every support write needs one).
+// `typeToConfirm`: the user must type this exact text before the button enables (for irreversible actions).
+export function ReasonDialog({
+  title, intro, confirmLabel, danger, reasonLabel = 'Reason', reasonHint = 'Recorded in the audit log.',
+  typeToConfirm, children, onSubmit, onClose,
+}) {
+  const [reason, setReason] = useState('');
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const ready = reason.trim() && (!typeToConfirm || typed.trim() === typeToConfirm) && !busy;
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!ready) return;
+    setBusy(true); setError(null);
+    try { await onSubmit(reason.trim()); onClose(); } catch (err) { setError(err); setBusy(false); }
+  }
+
+  return (
+    <Modal title={title} onClose={onClose} dirty={!!reason.trim()}>
+      <form onSubmit={submit}>
+        <ErrorBox error={error} />
+        {intro && <div className={danger ? 'callout danger' : 'callout'}>{intro}</div>}
+        {children}
+        <Field label={reasonLabel} hint={reasonHint} required>
+          <textarea rows={2} maxLength={500} value={reason} autoFocus onChange={(e) => setReason(e.target.value)} />
+        </Field>
+        {typeToConfirm && (
+          <Field label={<>Type <code>{typeToConfirm}</code> to confirm</>} required>
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+          </Field>
+        )}
+        <div className="actions">
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="submit" className={danger ? 'danger solid' : 'primary'} disabled={!ready}>{busy ? 'Working…' : confirmLabel}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 
 export const STATUSES = ['PUBLISHED', 'DRAFT', 'RETIRED'];
 
@@ -140,7 +215,3 @@ export function TableState({ loading, empty, cols, emptyText = 'Nothing here yet
   if (empty) return <tr><td colSpan={cols} className="state">{emptyText}</td></tr>;
   return children;
 }
-
-// Notice shown once when some row actions aren't available in the API yet.
-export const PlannedNotice = ({ defs, children }) =>
-  defs.some((d) => !d.live) ? <div className="notice">{children}</div> : null;

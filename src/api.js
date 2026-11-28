@@ -32,18 +32,43 @@ export async function request(method, path, { params, query, body, headers, with
   const text = await res.text();
   let data = text;
   try { data = text ? JSON.parse(text) : null; } catch { /* plain text */ }
-  if (!res.ok) {
-    const msg = (data && (typeof data.detail === 'string' ? data.detail : data.message || data.error)) || `${res.status} ${res.statusText}`;
-    throw new ApiError(res.status, res.status === 403 ? `Forbidden: ${msg}` : msg, data);
-  }
+  if (!res.ok) throw new ApiError(res.status, errorMessage(res, data), data);
   return withMeta ? { data, etag: res.headers.get('ETag') } : data;
+}
+
+// Turn the API's error bodies into one readable sentence.
+function errorMessage(res, data) {
+  if (res.status === 412) return 'Someone else changed this since you opened it. Reload and try again.';
+  if (res.status === 428) return 'The API needs the latest version of this item. Reload and try again.';
+  let msg;
+  if (Array.isArray(data?.detail)) {
+    // FastAPI validation errors: [{ loc: ['body', 'field'], msg }]
+    msg = data.detail.map((d) => `${(d.loc || []).filter((p) => p !== 'body').join('.') || 'request'}: ${d.msg}`).join('; ');
+  } else if (data && typeof data === 'object') {
+    msg = typeof data.detail === 'string' ? data.detail : data.message || data.error;
+  }
+  msg = msg || `${res.status} ${res.statusText}`;
+  return res.status === 403 ? `Forbidden: ${msg}` : msg;
 }
 
 export const call = (def, opts) => request(def.method, def.path, opts);
 
+const ifMatch = (etag) => (etag ? { 'If-Match': etag } : {});
+
+// For writes that need If-Match: use the ETag we have, or fetch the current one first.
+export async function callWithEtag(getDef, def, { params, etag, ...opts } = {}) {
+  const tag = etag ?? (await call(getDef, { params, withMeta: true })).etag;
+  return call(def, { ...opts, params, headers: { ...opts.headers, ...ifMatch(tag) } });
+}
+
 // Lists may come back as an array or wrapped.
 export const items = (d) =>
   Array.isArray(d) ? d : d?.items || d?.data || d?.results || d?.recipes || d?.users || d?.tags || [];
+
+// Show API `warnings` (set on publish / subscription override) as a toast.
+export function toastWarnings(toast, res) {
+  if (res?.warnings?.length) toast(res.warnings.join(' · '), 'warn');
+}
 
 // The API caps list `limit` at 100; fetch every page.
 const PAGE_SIZE = 100;

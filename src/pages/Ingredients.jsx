@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { call, items, listAll, uploadImage } from '../api.js';
+import { AuditLine, LifecycleButtons, StatusFilter, saveHint, useLifecycle } from '../catalog.jsx';
 import { E, ENUMS } from '../endpoints.js';
 import {
-  ActionButton, Chips, ErrorBox, Field, ImagePreview, Modal, PlannedNotice, STATUSES, StatusBadge,
-  TableState, Thumb, idOf, imageUrlOf, useLoad, useToast,
+  Chips, ErrorBox, Field, ImagePreview, Modal, StatusBadge, TableState, Thumb, fmtDate, idOf, imageUrlOf,
+  useLoad, useToast,
 } from '../ui.jsx';
 
 const NUTRIENTS = ['kcal', 'fat', 'protein', 'carbs'];
@@ -30,12 +31,15 @@ function buildRequestBody(ingredient) {
   };
 }
 
-function IngredientForm({ initial, allergens, tags, onClose, onSaved }) {
+function IngredientForm({ initial, allergens, tags, onClose, onSaved, onLifecycle }) {
   const toast = useToast();
   const isNew = !initial?.id;
+  // The API returns ingredient_tags as objects; the form edits ids.
   const startingIngredient = useMemo(() => ({
     ...EMPTY_INGREDIENT,
     ...initial,
+    brand: initial?.brand || '',
+    ingredient_tag_ids: initial?.ingredient_tag_ids || initial?.ingredient_tags?.map((t) => t.id) || [],
     nutrition: { ...EMPTY_INGREDIENT.nutrition, ...(initial?.nutrition_facts || initial?.nutrition) },
   }), [initial]);
   const [ingredient, setIngredient] = useState(startingIngredient);
@@ -48,18 +52,20 @@ function IngredientForm({ initial, allergens, tags, onClose, onSaved }) {
   const filledNutrients = NUTRIENTS.filter((k) => nutrition[k] !== '' && nutrition[k] != null).length;
   const nutritionIncomplete = filledNutrients > 0 && filledNutrients < NUTRIENTS.length;
   const isDirty = !!newImage || JSON.stringify(ingredient) !== JSON.stringify(startingIngredient);
-  const canSave = ingredient.name.trim() !== '' && !nutritionIncomplete && !saving;
-  const saveAction = isNew ? E.ingredients.create : E.ingredients.update;
+  const canSave = ingredient.name.trim() !== '' && Number(ingredient.size) > 0 && !nutritionIncomplete && !saving;
+  const blockReason = !ingredient.name.trim() ? 'Name is required'
+    : !(Number(ingredient.size) > 0) ? 'Size must be more than 0'
+      : nutritionIncomplete ? 'Complete the nutrition values' : undefined;
 
-  async function save(event) {
-    event.preventDefault();
+  // `publish` only applies to new ingredients: false creates a DRAFT customers can't see.
+  async function save(publish) {
     if (!canSave) return;
     setSaving(true);
     setError(null);
     try {
       const body = buildRequestBody(ingredient);
       const saved = isNew
-        ? await call(E.ingredients.create, { body })
+        ? await call(E.ingredients.create, { body: { ...body, publish } })
         : await call(E.ingredients.update, {
           params: { id: ingredient.id },
           body,
@@ -67,7 +73,7 @@ function IngredientForm({ initial, allergens, tags, onClose, onSaved }) {
         });
       const id = saved?.id ?? ingredient.id;
       if (newImage && id) await uploadImage(E.ingredients.presign, id, newImage);
-      toast(isNew ? 'Ingredient created' : 'Ingredient saved');
+      toast(isNew ? (publish ? 'Ingredient created and published' : 'Ingredient saved as draft') : 'Ingredient saved');
       onSaved();
     } catch (e) {
       setError(e);
@@ -78,11 +84,10 @@ function IngredientForm({ initial, allergens, tags, onClose, onSaved }) {
 
   return (
     <Modal title={isNew ? 'New catalog ingredient' : `Edit ${startingIngredient.name}`} onClose={onClose} dirty={isDirty} wide>
-      <form onSubmit={save}>
+      {/* Enter submits as a draft for new ingredients, so a stray keypress never publishes. */}
+      <form onSubmit={(e) => { e.preventDefault(); save(false); }}>
         <ErrorBox error={error} />
-        {!isNew && !E.ingredients.update.live && (
-          <div className="error">Editing existing ingredients isn't in the API yet ({E.ingredients.update.task}).</div>
-        )}
+        <AuditLine item={initial} />
 
         <ImagePreview savedUrl={imageUrlOf(initial)} newFile={newImage} />
         <Field label="Image" hint="Uploaded after saving via a presigned S3 URL.">
@@ -105,7 +110,7 @@ function IngredientForm({ initial, allergens, tags, onClose, onSaved }) {
             </select>
           </Field>
           <Field label="Size">
-            <input type="number" min="0" step="any" value={ingredient.size} onChange={(e) => update({ size: e.target.value })} />
+            <input type="number" min="0" step="any" required value={ingredient.size} onChange={(e) => update({ size: e.target.value })} />
           </Field>
           <Field label="Unit">
             <select value={ingredient.unit} onChange={(e) => update({ unit: e.target.value })}>
@@ -139,38 +144,54 @@ function IngredientForm({ initial, allergens, tags, onClose, onSaved }) {
             onChange={(v) => update({ ingredient_tag_ids: v })} />
         </Field>
 
+        {!isNew && saveHint(initial.status) && <p className="muted small">{saveHint(initial.status)}</p>}
         <div className="actions sticky">
+          {!isNew && (
+            <div className="actions-left">
+              <LifecycleButtons item={initial} run={onLifecycle} disabled={isDirty || saving}
+                title={isDirty ? 'Save or discard your changes first' : undefined} />
+            </div>
+          )}
           <button type="button" onClick={onClose}>Cancel</button>
-          <ActionButton def={saveAction} type="submit" className="primary" disabled={!canSave}
-            title={!ingredient.name.trim() ? 'Name is required' : nutritionIncomplete ? 'Complete the nutrition values' : undefined}>
-            {saving ? 'Saving…' : isNew ? 'Create ingredient' : 'Save changes'}
-          </ActionButton>
+          {isNew ? (
+            <>
+              <button type="submit" disabled={!canSave} title={blockReason || 'Customers can’t see drafts'}>
+                {saving ? 'Saving…' : 'Save as draft'}
+              </button>
+              <button type="button" className="primary" disabled={!canSave} title={blockReason} onClick={() => save(true)}>
+                Create &amp; publish
+              </button>
+            </>
+          ) : (
+            <button type="submit" className="primary" disabled={!canSave || !isDirty} title={blockReason}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          )}
         </div>
       </form>
     </Modal>
   );
 }
 
-const ROW_ACTIONS = [E.ingredients.publish, E.ingredients.retire, E.ingredients.remove];
-
-function IngredientRow({ ingredient, onOpen, onAction }) {
+function IngredientRow({ ingredient, onOpen, onLifecycle }) {
   return (
     <tr className="clickable" onClick={() => onOpen(ingredient)}>
       <td>
         <div className="name-cell">
           <Thumb src={imageUrlOf(ingredient)} />
-          <a href="#ingredients" onClick={(e) => e.preventDefault()}>{ingredient.name}</a>
+          <div>
+            <a href="#ingredients" onClick={(e) => e.preventDefault()}>{ingredient.name}</a>
+            {ingredient.brand && <div className="muted small">{ingredient.brand}</div>}
+          </div>
         </div>
       </td>
       <td>{ingredient.category}</td>
       <td>{ingredient.size} {ingredient.unit}</td>
       <td><StatusBadge status={ingredient.status} /></td>
+      <td className="muted small">{fmtDate(ingredient.updated_at)}</td>
       <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-        <ActionButton hideIfPlanned def={E.ingredients.publish} onClick={onAction(E.ingredients.publish, ingredient, 'Published')}>Publish</ActionButton>
-        <ActionButton hideIfPlanned def={E.ingredients.retire} onClick={onAction(E.ingredients.retire, ingredient, 'Retired')}>Retire</ActionButton>
+        <LifecycleButtons item={ingredient} run={onLifecycle} />
         <button onClick={() => onOpen(ingredient)}>Edit</button>
-        <ActionButton hideIfPlanned def={E.ingredients.remove} className="danger"
-          onClick={onAction(E.ingredients.remove, ingredient, 'Deleted', `Delete "${ingredient.name}"?`)}>Delete</ActionButton>
       </td>
     </tr>
   );
@@ -190,7 +211,7 @@ export default function Ingredients() {
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (ingredients.data || [])
-      .filter((r) => !needle || (r.name || '').toLowerCase().includes(needle))
+      .filter((r) => !needle || `${r.name || ''} ${r.brand || ''}`.toLowerCase().includes(needle))
       .filter((r) => !category || r.category === category)
       .filter((r) => !status || r.status === status)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -207,16 +228,8 @@ export default function Ingredients() {
     }
   }
 
-  const runAction = (def, ingredient, successMessage, confirmMessage) => async () => {
-    if (confirmMessage && !window.confirm(confirmMessage)) return;
-    try {
-      await call(def, { params: { id: ingredient.id } });
-      toast(successMessage);
-      ingredients.reload();
-    } catch (e) {
-      toast(e.message, 'bad');
-    }
-  };
+  const lifecycle = useLifecycle(E.ingredients, 'ingredient', ingredients.reload);
+  const lifecycleFromEditor = async (kind, ingredient) => { if (await lifecycle(kind, ingredient)) setEditing(null); };
 
   const closeEditor = () => setEditing(null);
   const handleSaved = () => { closeEditor(); ingredients.reload(); };
@@ -229,27 +242,23 @@ export default function Ingredients() {
       </div>
 
       <div className="toolbar">
-        <input className="grow" type="search" placeholder="Search ingredients…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className="grow" type="search" placeholder="Search by name or brand…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select aria-label="Filter by category" value={category} onChange={(e) => setCategory(e.target.value)}>
           <option value="">All categories</option>
           {ENUMS.ingredientCategory.map((c) => <option key={c}>{c}</option>)}
         </select>
-        <select aria-label="Filter by status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s}>{s}</option>)}
-        </select>
+        <StatusFilter rows={ingredients.data} value={status} onChange={setStatus} />
         {hasFilters && <button onClick={clearFilters}>Clear</button>}
         <button onClick={ingredients.reload}>Refresh</button>
       </div>
       <ErrorBox error={ingredients.error} />
-      <PlannedNotice defs={ROW_ACTIONS}>Publish, retire and delete will appear here once the API supports them.</PlannedNotice>
 
       <table>
-        <thead><tr><th>Name</th><th>Category</th><th>Size</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Category</th><th>Size</th><th>Status</th><th>Updated</th><th></th></tr></thead>
         <tbody>
-          <TableState loading={ingredients.loading} empty={!visible.length} cols={5}
+          <TableState loading={ingredients.loading} empty={!visible.length} cols={6}
             emptyText={hasFilters ? 'No ingredients match your filters.' : 'No ingredients yet — click “+ New ingredient” to add one.'}>
-            {visible.map((r) => <IngredientRow key={r.id} ingredient={r} onOpen={openIngredient} onAction={runAction} />)}
+            {visible.map((r) => <IngredientRow key={r.id} ingredient={r} onOpen={openIngredient} onLifecycle={lifecycle} />)}
           </TableState>
         </tbody>
       </table>
@@ -257,7 +266,7 @@ export default function Ingredients() {
 
       {editing && (
         <IngredientForm initial={editing.id ? editing : null} allergens={allergens.data || []} tags={tags.data || []}
-          onClose={closeEditor} onSaved={handleSaved} />
+          onClose={closeEditor} onSaved={handleSaved} onLifecycle={lifecycleFromEditor} />
       )}
     </>
   );

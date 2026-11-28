@@ -5,6 +5,7 @@ import Recipes from './pages/Recipes.jsx';
 import DietTags from './pages/DietTags.jsx';
 import Ingredients from './pages/Ingredients.jsx';
 import Accounts from './pages/Accounts.jsx';
+import Plans from './pages/Plans.jsx';
 import Explorer from './pages/Explorer.jsx';
 
 // key -> [label, component, nav group]
@@ -12,8 +13,9 @@ const PAGES = {
   recipes: ['Recipes', Recipes, 'Catalog'],
   ingredients: ['Ingredients', Ingredients, 'Catalog'],
   tags: ['Diet tags', DietTags, 'Catalog'],
-  accounts: ['Accounts', Accounts, 'Support'],
-  explorer: ['API Explorer', Explorer, 'Support'],
+  accounts: ['Accounts', Accounts, 'Customers'],
+  plans: ['Plan limits', Plans, 'Customers'],
+  explorer: ['API Explorer', Explorer, 'Tools'],
 };
 const DEFAULT_PAGE = 'recipes';
 
@@ -59,10 +61,17 @@ function Login({ onDone }) {
 
 export default function App() {
   const [user, setUser] = useState(currentUser());
-  const readPage = () => (PAGES[window.location.hash.slice(1)] ? window.location.hash.slice(1) : DEFAULT_PAGE);
-  const [page, setPage] = useState(readPage);
+  // Hash routes: #page or #page/<param> (e.g. #accounts/<id> opens that account).
+  const readRoute = () => {
+    const [key, ...rest] = window.location.hash.slice(1).split('/');
+    return PAGES[key] ? { page: key, param: decodeURIComponent(rest.join('/')) || null } : { page: DEFAULT_PAGE, param: null };
+  };
+  const [{ page, param }, setRoute] = useState(readRoute);
   useEffect(() => {
-    const h = () => { setPage(readPage()); window.scrollTo(0, 0); };
+    const h = () => {
+      const next = readRoute();
+      setRoute((prev) => { if (prev.page !== next.page) window.scrollTo(0, 0); return next; });
+    };
     window.addEventListener('hashchange', h);
     return () => window.removeEventListener('hashchange', h);
   }, []);
@@ -91,7 +100,7 @@ export default function App() {
           <div className="who">{user.email || user.username}</div>
           <button onClick={() => { signOut(); setUser(null); }}>Sign out</button>
         </nav>
-        <main><Page /></main>
+        <main><Page key={page} param={param} /></main>
       </div>
     </ToastProvider>
   );
